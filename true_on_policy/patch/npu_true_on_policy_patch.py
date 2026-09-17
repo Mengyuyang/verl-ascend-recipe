@@ -17,7 +17,7 @@ from vllm.v1.sample.sampler import Sampler
 from vllm_ascend import ascend_forward_context
 from vllm_ascend.ascend_forward_context import MoECommType
 from vllm_ascend.ops.activation import AscendSiluAndMul, AscendSwigluOAIAndMul
-from vllm_ascend.ops.fused_moe import experts_selector, moe_mlp
+from vllm_ascend.ops.fused_moe import experts_selector, moe_comm_method, moe_mlp
 from vllm_ascend.ops.fused_moe.comm_utils import async_all_to_all
 from vllm_ascend.ops.fused_moe.moe_runtime_args import (
     MoETokenDispatchInput,
@@ -443,6 +443,25 @@ def select_all_to_all_moe_comm_method_train_infer_consistent(
     return MoECommType.ALLTOALL
 
 
+# Captured at import time, before any monkey patching, so re-applying the
+# patches never wraps the wrapper itself.
+_ORIG_SETUP_MOE_COMM_METHOD = moe_comm_method.setup_moe_comm_method
+
+
+def setup_moe_comm_method_with_alltoall_backfill_train_infer_consistent(moe_config) -> None:
+    """Register the ALLTOALL impl even when expert parallel is disabled.
+
+    Since vllm-ascend 0.23.0, setup_moe_comm_method registers ALLTOALL only
+    when ep_size > 1, but true_on_policy forces MoECommType.ALLTOALL (see the
+    select patch above) for train-infer consistency. Without this backfill the
+    forced selection resolves to None and the MoE forward crashes with
+    "AttributeError: 'NoneType' object has no attribute 'prepare'".
+    """
+    _ORIG_SETUP_MOE_COMM_METHOD(moe_config)
+    if MoECommType.ALLTOALL not in moe_comm_method._MoECommMethods:
+        moe_comm_method._MoECommMethods[MoECommType.ALLTOALL] = moe_comm_method.AlltoAllCommImpl(moe_config)
+
+
 def apply_batch_consistency_patches() -> None:
     """Apply batch-consistency monkey patches for vLLM Ascend."""
 
@@ -457,3 +476,4 @@ def apply_batch_consistency_patches() -> None:
     Sampler.compute_logprobs = compute_logprobs_from_logits_train_infer_consistent
     RowParallelLinear.forward = run_row_parallel_linear_with_padded_reduce_scatter_train_infer_consistent
     ascend_forward_context.select_moe_comm_method = select_all_to_all_moe_comm_method_train_infer_consistent
+    moe_comm_method.setup_moe_comm_method = setup_moe_comm_method_with_alltoall_backfill_train_infer_consistent
