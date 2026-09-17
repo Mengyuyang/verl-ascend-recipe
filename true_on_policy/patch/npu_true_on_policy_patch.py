@@ -446,6 +446,7 @@ def select_all_to_all_moe_comm_method_train_infer_consistent(
 # Captured at import time, before any monkey patching, so re-applying the
 # patches never wraps the wrapper itself.
 _ORIG_SETUP_MOE_COMM_METHOD = moe_comm_method.setup_moe_comm_method
+_ORIG_GET_MOE_COMM_METHOD = moe_comm_method.get_moe_comm_method
 
 
 def setup_moe_comm_method_with_alltoall_backfill_train_infer_consistent(moe_config) -> None:
@@ -460,6 +461,23 @@ def setup_moe_comm_method_with_alltoall_backfill_train_infer_consistent(moe_conf
     _ORIG_SETUP_MOE_COMM_METHOD(moe_config)
     if MoECommType.ALLTOALL not in moe_comm_method._MoECommMethods:
         moe_comm_method._MoECommMethods[MoECommType.ALLTOALL] = moe_comm_method.AlltoAllCommImpl(moe_config)
+
+
+def get_moe_comm_method_with_alltoall_fallback_train_infer_consistent(moe_comm_type):
+    """Resolve ALLTOALL even when it was never registered (ep_size == 1).
+
+    Belt-and-braces companion to the setup backfill above:
+    set_ascend_forward_context lazy-imports get_moe_comm_method inside the
+    context manager on every forward, so patching the module attribute here
+    takes effect regardless of from-import binding order anywhere else.
+    """
+    method = _ORIG_GET_MOE_COMM_METHOD(moe_comm_type)
+    if method is None and moe_comm_type == MoECommType.ALLTOALL:
+        allgather = moe_comm_method._MoECommMethods.get(MoECommType.ALLGATHER)
+        if allgather is not None:
+            method = moe_comm_method.AlltoAllCommImpl(allgather.moe_config)
+            moe_comm_method._MoECommMethods[MoECommType.ALLTOALL] = method
+    return method
 
 
 def apply_batch_consistency_patches() -> None:
@@ -477,3 +495,4 @@ def apply_batch_consistency_patches() -> None:
     RowParallelLinear.forward = run_row_parallel_linear_with_padded_reduce_scatter_train_infer_consistent
     ascend_forward_context.select_moe_comm_method = select_all_to_all_moe_comm_method_train_infer_consistent
     moe_comm_method.setup_moe_comm_method = setup_moe_comm_method_with_alltoall_backfill_train_infer_consistent
+    moe_comm_method.get_moe_comm_method = get_moe_comm_method_with_alltoall_fallback_train_infer_consistent
