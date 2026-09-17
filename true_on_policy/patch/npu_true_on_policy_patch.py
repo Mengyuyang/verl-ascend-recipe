@@ -75,12 +75,15 @@ def apply_unquantized_grouped_mlp_train_infer_consistent(
     expanded_row_idx: torch.Tensor | None = None,
     topk_ids: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    if swiglu_limit or lora_context is not None or expanded_row_idx is not None or topk_ids is not None:
+    # topk_ids/expanded_row_idx are only consumed by the MoE LoRA branch of
+    # vllm-ascend's unquant_apply_mlp, so they are inert while lora_context is
+    # None. swiglu_limit and an active LoRA context would change the numerics,
+    # so keep rejecting exactly those.
+    if swiglu_limit or lora_context is not None:
         raise ValueError(
             "apply_unquantized_grouped_mlp_train_infer_consistent does not support "
-            "swiglu_limit/lora_context/expanded_row_idx/topk_ids. The Megatron-style "
-            "grouped MLP path cannot honor them; disable true_on_policy for this "
-            "model or extend the patch."
+            "swiglu_limit/lora_context. The Megatron-style grouped MLP path cannot "
+            "honor them; disable true_on_policy for this model or extend the patch."
         )
 
     if need_trans:
