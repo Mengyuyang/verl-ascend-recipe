@@ -73,8 +73,8 @@ test_freq=${TEST_FREQ:--1}
 project_name=${PROJECT_NAME:-verl_grpo_qwen3_moe}
 experiment_name=${EXPERIMENT_NAME:-qwen3_30b_a3b_grpo_vllm_megatron}
 
- train_file=${TRAIN_FILE:-$HOME/data/dapo-math-17k.parquet}
- val_file=${VAL_FILE:-$HOME/data/dapo-math-17k.parquet}
+train_file=${TRAIN_FILE:-$HOME/data/dapo-math-17k.parquet}
+val_file=${VAL_FILE:-$HOME/data/dapo-math-17k.parquet}
 
 # ---- end user-adjustable ----
 ########################### parameter arrays ###########################
