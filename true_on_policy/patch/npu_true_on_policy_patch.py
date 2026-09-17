@@ -70,7 +70,19 @@ def apply_unquantized_grouped_mlp_train_infer_consistent(
     group_list_type: int = 1,
     topk_scales: torch.Tensor | None = None,
     need_trans: bool = True,
+    swiglu_limit: float = 0.0,
+    lora_context=None,
+    expanded_row_idx: torch.Tensor | None = None,
+    topk_ids: torch.Tensor | None = None,
 ) -> torch.Tensor:
+    if swiglu_limit or lora_context is not None or expanded_row_idx is not None or topk_ids is not None:
+        raise ValueError(
+            "apply_unquantized_grouped_mlp_train_infer_consistent does not support "
+            "swiglu_limit/lora_context/expanded_row_idx/topk_ids. The Megatron-style "
+            "grouped MLP path cannot honor them; disable true_on_policy for this "
+            "model or extend the patch."
+        )
+
     if need_trans:
         w1 = w1.transpose(1, 2)
         w2 = w2.transpose(1, 2)
@@ -120,8 +132,18 @@ def select_experts_with_torch_topk_train_infer_consistent(
     scoring_func: str = "softmax",
     routed_scaling_factor=1.0,
     global_num_experts: int = -1,
+    tid2eid: torch.Tensor | None = None,
+    input_ids: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    _ = hidden_states, renormalize, scoring_func, global_num_experts
+    _ = hidden_states, renormalize, scoring_func, global_num_experts, input_ids
+
+    if tid2eid is not None:
+        raise ValueError(
+            "select_experts_with_torch_topk_train_infer_consistent does not support "
+            "tid2eid (sqrtsoftplus token-to-expert routing). The torch.topk routing "
+            "path cannot honor it; disable true_on_policy for this model or extend "
+            "the patch."
+        )
 
     num_tokens, num_experts = router_logits.shape
 
@@ -272,6 +294,10 @@ def dispatch_tokens_with_all_to_all_train_infer_consistent(
         dynamic_scale_after_all_to_all,
         local_expert_indices,
         use_quant,
+        # vllm-ascend 0.23.0 added dst_type/scale_type (used only by the fp8
+        # e8m0 quant branch); keep the 0.18.0 defaults for the unquantized path.
+        torch.bfloat16,
+        torch.bfloat16,
     )
 
     _, global_weights, weights_handle = async_all_to_all(
@@ -379,8 +405,9 @@ def combine_tokens_after_all_to_all_train_infer_consistent(
 def patch_compute_logits_passthrough_train_infer_consistent(
     model,
     vocab_size: int,
+    banned_token_ids=None,
 ) -> None:
-    _ = vocab_size
+    _ = vocab_size, banned_token_ids
     original_compute_logits = model.compute_logits
 
     def compute_logits(self, *args, **kwargs) -> torch.Tensor:
