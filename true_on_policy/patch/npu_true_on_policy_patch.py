@@ -74,7 +74,7 @@ def apply_unquantized_grouped_mlp_train_infer_consistent(
     lora_context=None,
     expanded_row_idx: torch.Tensor | None = None,
     topk_ids: torch.Tensor | None = None,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, None]:
     # topk_ids/expanded_row_idx are only consumed by the MoE LoRA branch of
     # vllm-ascend's unquant_apply_mlp, so they are inert while lora_context is
     # None. swiglu_limit and an active LoRA context would change the numerics,
@@ -112,7 +112,7 @@ def apply_unquantized_grouped_mlp_train_infer_consistent(
     if topk_scales is not None:
         gate_up_output *= topk_scales
 
-    return torch_npu.npu_grouped_matmul(
+    down_output = torch_npu.npu_grouped_matmul(
         x=[gate_up_output],
         weight=[w2],
         bias=[w2_bias.to(dtype=torch.float32)] if w2_bias is not None else None,
@@ -121,6 +121,9 @@ def apply_unquantized_grouped_mlp_train_infer_consistent(
         group_type=0,
         group_list=group_list,
     )[0]
+    # vllm-ascend 0.23.0's fused_experts unpacks (mlp_output, before_gmm2_evt);
+    # the unquantized path has no gmm2 event, matching upstream's `return ..., None`.
+    return down_output, None
 
 
 def select_experts_with_torch_topk_train_infer_consistent(
