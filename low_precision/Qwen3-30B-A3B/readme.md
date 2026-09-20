@@ -12,7 +12,7 @@
 | CANN                   | 9.2.0           | 
 | PyTorch                | 2.10.0          | 
 | torch\_npu             | 2.10.0.post4    | 
-| verl                   | main            | 
+| verl                   | 00cd5b44(main)  | 
 | vLLM                   | 0.23.0          | 
 | vLLM-Ascend            | 0.23.0          | 
 | MindSpeed              | master          | 
