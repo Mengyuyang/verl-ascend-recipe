@@ -27,7 +27,7 @@ fi
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-} \
     DEBIAN_FRONTEND=noninteractive apt-get install -y mpich libmpich-dev
 
-CANN_INSTALL_PATH=${CANN_INSTALL_PATH:-"/mnt/share/t00986241/b106"}
+CANN_INSTALL_PATH=${CANN_INSTALL_PATH:-"/path/to/your/cann/install"}
 source ${CANN_INSTALL_PATH}/ascend-toolkit/set_env.sh
 source /usr/local/Ascend/nnal/atb/set_env.sh
 
